@@ -1,67 +1,77 @@
-collection_integral <- function(funkcia, mi, kolekcia)
+library(lpSolve)
+
+collection_integral <- function(f, mi, system)
 {
-  pocet<-length(funkcia)
+  pocet<-length(f)
   #prava strana je ta funkcia?
   #kolekcia bude binarne napr. "101","001" atd
-  rhs<- funkcia
-  dir<- rep("<=",length(funkcia))
-  dec<-strtoi(kolekcia,2) #kolekcia decimalne
-  matica <- matrix(nrow = pocet, ncol = length(kolekcia) )
   
-  for (i in 1:length(kolekcia)) 
+  
+  for(i in 1:length(system))
   {
-    for(j in 0:(pocet-1))
+    funkcia<-c()
+    kolekcia<-system[[i]] #kolekcia ktoru prechadzam
+    rhs<-c(f,rep(0,length(kolekcia)))
+    dir<- c(rep("<=",length(f)),rep(">=",length(kolekcia)))
+    dec<-strtoi(kolekcia,2) #kolekcia decimalne
+    matica <- matrix(nrow = pocet+length(kolekcia), ncol = length(kolekcia))
+    for(j in 1:length(kolekcia))
     {
-      #print(as.numeric(substr(kolekcia[i],pocet-j,pocet-j)))
-      if(as.numeric(substr(kolekcia[i],pocet-j,pocet-j))==1)
+      funkcia<-c(funkcia,mi[dec[j]])
+      for (k in 0:(pocet-1))
       {
-        matica[j+1,i]<-mi[dec[i]]
+        if(as.numeric(substr(kolekcia[j],pocet-k,pocet-k))==1)
+        {
+          matica[k+1,j]<-mi[dec[j]]
+          #matica[k+1,j]<-1
+          
+        }
+        else
+        {
+          matica[k+1,j]<-0
+          
+        }
       }
-      else
+      for (k in 1:length(kolekcia))
       {
-        matica[j+1,i]<-0
+        if(j==k)
+        {
+          matica[k+pocet,j]<-1
+        }
+        else
+        {
+          matica[k+pocet,j]<-0
+        }
       }
     }
+    vysledok<-lp("max",funkcia,matica,dir,rhs)
+    print(matica)
+    print(rhs)
+    print(vysledok)
+    print(vysledok$solution)
+    print(dir)
   }
-  
+
 }
 
-collection_integral(c(0.5,0.3),c(0.2,0.3,0.7),c("01","10","11"))
+collection_integral(c(1,2,3),c(1,16,25,81,25,100,196),
+                    list(c("111","011","101","001"),c("011","001"),c("001")))
 
 
-test<-c("123","456")
-for(i in 1:length(test))
+
+
+for (i in 1:length(kolekcie)) 
 {
-  for(j in 0:2)
+  for(j in 0:(pocet-1))
   {
-    print(substr(test[i],3-j,3-j))
-  }
-}
-
-#lp() v lpSolve
-
-#INT -> BIN
-#toto mi najviac sedi do toho ze ako by sa to malo premienat, ale je to z R.utils
-intToBin(as.numeric(c(5,10)))
-
-#BIN -> INT
-#toto neni z nejakej konkretnej package
-strtoi(c("0101","1"),2)
-
-mat<-matrix(nrow=3,ncol=3)
-for(i in 1:3)
-{
-  for(j in 1:3)
-  {
-    if(i==j)
+    #print(as.numeric(substr(kolekcia[i],pocet-j,pocet-j)))
+    if(as.numeric(substr(kolekcie[i],pocet-j,pocet-j))==1)
     {
-      mat[i,j]<-1
+      matica[j+1,i]<-mi[dec[i]]
     }
     else
     {
-      mat[i,j]<--j
+      matica[j+1,i]<-0
     }
   }
 }
-mat[1,]
-print(c(mat[1,1],mat[2,1]))
