@@ -2,6 +2,28 @@ library(boot)
 
 collection_integral <- function(f, mi, kolekcia)
 {
+  if(length(kolekcia)==1)
+  {
+    vysledok <- mi[strtoi(kolekcia,2)]
+    print("len jeden prvok")
+    return(vysledok)
+  }
+  
+  if(is_chain(kolekcia))
+  {
+    vysledok<-chain_int(f,mi,kolekcia)
+    print("je to chain")
+    return(vysledok)
+  }
+  
+  if(is_subpartition(kolekcia))
+  {
+    vysledok<-subpartition_int(f,mi,kolekcia)
+    print("je to subpartition")
+    return(vysledok)
+  }
+  print("ide cez simplex")
+  
   pocet<-length(f) #nech viem kolko prvkov je danych
   funkcia<-c()  #to bude funkcia ktora sa optimalizuje
   rhs<-f #prava strana
@@ -55,10 +77,6 @@ is_chain<-function(kolekcia)
     #' ak to je 1, tak pokracujem na dalsi znak rovnako
   #' nuly mozem vzdy neriesit lebo ak tam je nula, bola nula na tom mieste aj 
   #' doteraz
-  if(length(kolekcia)==1)
-  {
-    return(TRUE)
-  }
   pocet<-nchar(kolekcia[1])
   dec<-strtoi(kolekcia,2)
   poradie<-order(dec)
@@ -73,6 +91,10 @@ is_chain<-function(kolekcia)
         {
           return(FALSE)
         }
+        else
+        {
+          next
+        }
       }
       else
       {
@@ -80,13 +102,73 @@ is_chain<-function(kolekcia)
       }
     }
   }
-  
   return(TRUE)
 }
 
-is_chain(k1)
+is_subpartition<-function(kolekcia)
+{
+  pocet<-nchar(kolekcia[1])
+  dec<-strtoi(kolekcia,2)
+  poradie<-order(dec,decreasing = TRUE)
+  ordered<-kolekcia[poradie]
+  
+  for(i in 1:(length(ordered)-1))
+  {
+    for(j in 1:pocet)
+    {
+      if(as.numeric(substr(ordered[i],j,j))==1)
+      {
+        if(as.numeric(substr(ordered[i+1],j,j))==1)
+        {
+          return(FALSE)
+        }
+      }
+      else
+      {
+        next
+      }
+    }
+  }
+  return(TRUE)
+}
 
+find_min<-function(f,mnozina)
+{
+  pocet<-length(f)
+  rozd<-unlist(strsplit(mnozina,split=""))
+  
+  return(min(f[pocet-(which(rozd=="1")-1)]))
+}
 
+chain_int<-function(f,mi,kolekcia)
+{
+  pocet<-length(kolekcia) #kolko mnozin je v kolekcii
+  poradie<-order(kolekcia)
+  ordered<-kolekcia[poradie]  #usporiadana kolekcia od najvacsej
+  dec<-strtoi(ordered,2) #ursporiadana kolekcia decimalne
+
+  vysledok<-find_min(f,ordered[pocet])*mi[dec[pocet]]
+  
+  for(i in 1:(pocet-1))
+  {
+    vysledok<-vysledok+(find_min(f,ordered[i])-find_min(f,ordered[i+1]))*mi[dec[i]]
+  }
+  return(vysledok)
+}
+
+subpartition_int<-function(f,mi,kolekcia)
+{
+  pocet<-length(kolekcia) #kolko mnozin je v kolekcii
+  dec<-strtoi(kolekcia,2) #kolekcia decimalne
+  
+  vysledok<-0
+  
+  for(i in 1:pocet)
+  {
+    vysledok<-vysledok+mi[dec[i]]*find_min(f,kolekcia[i])
+  }
+  return(vysledok)
+}
 
 #overridenuta funkcia na vypis vysledku dekompozicneho integralu
 print.custom_result_class <- function(x) {
@@ -103,11 +185,9 @@ k2<-c("011","001")
 k3<-c("001")
 system<-list(k2,k1,k3)
 
+
+
+
 collection_integral(f,mu,k1)
 decomposition_integral(f,mu,system)
 
-
-
-dec<-strtoi(k1,2)
-poradie<-order(dec)
-k1[poradie]
