@@ -3,23 +3,66 @@ library(boot)
 CollectionIntegral <- setRefClass("CollectionIntegral", 
                                   fields = list(
                                     collection = "character",
+                                    dec="numeric",
                                     chain = "logical",
                                     single = "logical",
                                     subpartition = "logical"
                                   ),
                                   methods = list(
                                     initialize = function(coll) {
-                                      .self$collection <- sapply(coll, make_string, dlzka = max(nchar(coll)))
+                                      .self$collection <- sapply(coll, make_string, length = max(nchar(coll)))
+                                      .self$dec<-strtoi(.self$collection,2)
                                       .self$single <- length(.self$collection) == 1
                                       .self$chain <- .self$is_chain()
                                       .self$subpartition <- .self$is_subpartition()
                                     },
                                     show = function() {
                                       cat("Kolekcia: \n")
-                                      cat(.self$collection, "\n", sep = " ")
-                                      cat("Reťazec  ", .self$chain, "\n", sep = "")
-                                      cat("Jeden prvok  ", .self$single, "\n", sep = "")
-                                      cat("Podrozklad  ", .self$subpartition, "\n", sep = "")
+                                      cat(.self$collection, "\n")
+                                      cat(.self$dec, "\n", sep = " ")
+                                      cat("Reťazec  ", .self$chain, "\n")
+                                      cat("Jeden prvok  ", .self$single, "\n")
+                                      cat("Podrozklad  ", .self$subpartition, "\n")
+                                    }
+                                  )
+)
+
+DecompositionIntegral <- setRefClass("DecompositionIntegral", 
+                                  fields = list(
+                                    collections = "list",
+                                    pan = "logical",
+                                    choquet = "logical",
+                                    shilkret="logical"
+                                  ),
+                                  methods = list(
+                                    initialize = function(coll) {
+                                      .self$collections <- coll[order(sapply(coll, function(c) length(c$collection)),decreasing = F)]
+                                      delete_subsets()
+                                      .self$pan<-all(sapply(.self$collections, function(c) c$subpartition))
+                                      .self$choquet<-all(sapply(.self$collections, function(c) c$chain))
+                                      .self$shilkret<-all(sapply(.self$collections, function(c) c$single))
+                                    },
+                                    show = function() {
+                                      sapply(.self$collections, function(c) cat(c$collection, "\n"))
+                                      cat("PAN  ", .self$pan, "\n")
+                                      cat("Choquet  ", .self$choquet, "\n")
+                                      cat("Shilkret  ", .self$shilkret, "\n")
+                                    },
+                                    delete_subsets=function(){
+                                      del<-c()
+                                      for (i in 1:(length(.self$collections)-1))
+                                      {
+                                        for (j in (i+1):length(.self$collections))
+                                        {
+                                          if(all(.self$collections[[i]]$dec%in%.self$collections[[j]]$dec))
+                                          {
+                                            del<-c(del,i)
+                                          }
+                                        }
+                                      }
+                                      if (length(del) > 0) {
+                                        .self$collections <- .self$collections[-del]
+                                      }
                                     }
                                   )
 )
@@ -30,7 +73,7 @@ CollectionIntegral$methods(is_chain = function() {
     return(TRUE)
   }
   
-  ordered <- .self$collection[order(strtoi(.self$collection, 2))]
+  ordered <- .self$collection[order(.self$dec)]
   
   for (i in 1:(length(ordered) - 1)) {
     for (j in 1:nchar(ordered[1])) {
@@ -44,6 +87,7 @@ CollectionIntegral$methods(is_chain = function() {
     }
   }
   .self$collection<-ordered
+  .self$dec<-.self$dec[order(.self$dec)]
   return(TRUE)
 })
 
@@ -72,48 +116,45 @@ CollectionIntegral$methods(is_subpartition = function() {
 
 
 CollectionIntegral$methods(compute = function(f, mi) {
-  pocet<-length(f) #nech viem kolko prvkov je danych
-  .self$collection<-sapply(.self$collection, make_string, dlzka = pocet)
   if(.self$single)
   {
-    vysledok <- mi[strtoi(.self$collection,2)]
+    result <- mi[.self$dec]
     print("len jeden prvok")
-    return(vysledok)
+    return(result)
   }
   if(.self$chain)
   {
-    vysledok<-.self$chain_int(f,mi)
+    result<-.self$chain_int(f,mi)
     print("je to chain")
-    return(vysledok)
+    return(result)
   }
   if(.self$subpartition)
   {
-    vysledok<-.self$subpartition_int(f,mi)
+    result<-.self$subpartition_int(f,mi)
     print("je to subpartition")
-    return(vysledok)
+    return(result)
   }
   print("ide cez simplex")
+  num<-length(f) #nech viem kolko prvkov je danych
+  .self$collection<-sapply(.self$collection, make_string, length = num)
   
-  funkcia <- mi[strtoi(.self$collection, 2)]  #to bude funkcia ktora sa optimalizuje
+  fun <- mi[strtoi(.self$collection, 2)]  #to bude funkcia ktora sa optimalizuje
   rhs<-f #prava strana
-  dec<-strtoi(.self$collection,2) #kolekcia decimalne
-  matica <- matrix(0, nrow = pocet, ncol = length(.self$collection)) #inicializacia przdnej matice na simplexku
+  matrix <- matrix(0, nrow = num, ncol = length(.self$collection)) #inicializacia przdnej matice na simplexku
   
   for (i in 1:length(.self$collection)) {
-    vector <- as.integer(strsplit(.self$collection, "")[[1]]) == 1
-    matica[, i] <- rev(vector)  
+    vector <- strsplit(.self$collection, "")[[i]] == 1
+    matrix[, i] <- rev(vector)  
   }
   #vypocitanie
-  vysledok<-simplex(a = funkcia, A1 = matica, b1 = rhs, maxi = TRUE)$value
-  return(unname(vysledok))
+  result<-simplex(a = fun, A1 = matrix, b1 = rhs, maxi = TRUE)$value
+  return(unname(result))
 })
 
 CollectionIntegral$methods(chain_int = function(f, mi) {
   num <- length(.self$collection)
-  dec <- strtoi(.self$collection, 2)
   
-  result <- find_min(f, .self$collection[num]) * mi[dec[num]]
-  
+  result <- find_min(f, .self$collection[num]) * mi[.self$dec[num]]
   for (i in (num - 1)) {
     result <- result + (find_min(f, .self$collection[i]) - find_min(f, .self$collection[i + 1])) * mi[dec[i]]
   }
@@ -121,23 +162,25 @@ CollectionIntegral$methods(chain_int = function(f, mi) {
   return(result)
 })
 
+
 CollectionIntegral$methods(subpartition_int = function(f, mi) {
-  dec <- strtoi(.self$collection, 2)
-  result <- sum(mi[dec] * sapply(.self$collection, find_min, f = f))
+  result <- sum(mi[.self$dec] * sapply(.self$collection, find_min, f = f))
   return(result)
 })
 
-decomposition_integral = function(f, mi,system) {
-  vysledky <- sapply(system, function(s) s$compute(f, mi))
+DecompositionIntegral$methods(compute=function(f,mi){
+  results <- sapply(.self$collections, function(s) s$compute(f, mi))
   
-  maximum <- max(vysledky)
-  poradie <- which.max(vysledky)
+  maximum <- max(results)
+  order <- which.max(results)
   
-  result <- list(max_value = maximum, coll_num = poradie)
+  result <- list(max_value = maximum, coll_num = order)
   class(result) <- "custom_result_class"
-  print(c("vysledky:", vysledky))
+  print(c("vysledky:", results))
   return(result)
-}
+  
+})
+
 
 
 find_min<-function(f,set)
@@ -155,10 +198,10 @@ print.custom_result_class <- function(x) {
   cat("Found in collection no.:", x$coll_num, "\n")
 }
 
-make_string<-function(dlzka,cislo)
+make_string<-function(length,number)
 {
-  kolko_pridat<-dlzka-nchar(as.character(cislo))
-  string<-paste0(strrep("0", kolko_pridat), cislo)
+  to_add<-length-nchar(as.character(number))
+  string<-paste0(strrep("0", to_add), number)
   return(string)
 }
 
@@ -173,12 +216,14 @@ system<-list(k2,k1,k3)
 
 
 c1<-CollectionIntegral$new(c(111,011,101,001))
-c2<-CollectionIntegral$new(c(010,001))
+c2<-CollectionIntegral$new(c(110,100))
 c3<-CollectionIntegral$new(c(001))
-c2
+c2$compute(f,mu)
+
+c2$compute(f,mu)
 
 c1$compute(f,mu)
-c2$compute(f,mu)
+c3$compute(f,mu)
 
 c2<-CollectionIntegral$new(c(110,100))
 c3<-CollectionIntegral$new(c(001))
@@ -195,3 +240,15 @@ c1$integral(f,mu)
 c1$integral(f2,mu2)
 
 
+
+c1<-CollectionIntegral$new(c(111,011,101,001))
+c2<-CollectionIntegral$new(c(110,100))
+c3<-CollectionIntegral$new(c(001))
+syste<-DecompositionIntegral$new(list(c1,c2,c3))
+syste$compute(f,mu)
+syste$collections[[2]]$compute(f,mu)
+
+all(sapply(syste$collections, function(c) c$chain))
+
+
+c2$compute(f,mu)
