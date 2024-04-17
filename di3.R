@@ -76,15 +76,13 @@ CollectionIntegral$methods(is_chain = function() {
   if (.self$single) {
     return(TRUE)
   }
-  
+
   for (i in 1:(length(.self$collection) - 1)) {
-    for (j in seq_along(.self$collection[[i]])) {
-      current_char <- as.integer(.self$collection[[i]][j])
-      next_char <- as.integer(.self$collection[[i+1]][j])
-      if (current_char > next_char) 
-      {
-        return(FALSE)
-      }
+    control_element<-.self$collection[[i]]
+    compare_element <- .self$collection[[i+1]]
+    check_indexes <- which(control_element)
+    if (!all(compare_element[check_indexes])) {
+      return(FALSE)
     }
   }
   return(TRUE)
@@ -114,65 +112,21 @@ CollectionIntegral$methods(is_subpartition = function() {
 })
 
 CollectionIntegral$methods(is_pc=function(){
-  if(.self$single)
+  if(.self$single || .self$chain || .self$subpartition)
   {
     return(TRUE)
   }
   control_coll<-.self$collection
   
-  recursive_function <- function(control_coll, control_element = NULL, result_list = list()) {
-    # Base case: stop if control_coll is empty
-    if (length(control_coll) == 0) {
-      print("už je control_coll prazdne")
-      print(result_list)
-      return(result_list)
-    }
-    print(control_coll)
-    # Take the first element from control_coll as control_element
-    if (is.null(control_element)) {
-      print("beriem control element")
-      control_element <- control_coll[[1]]
-      print(control_element)
-      control_coll <- control_coll[-1]
-      print("mažem  z control coll, nove je:")
-      print(control_coll)
-    }
-    
-    # Find a match in control_coll
-    match_found <- FALSE
-    for (i in seq_along(control_coll)) {
-      print("vyberám compare element")
-      compare_element <- control_coll[[i]]
-      print(compare_element)
-      # Check if control_element is a proper subset of compare_element
-      check_indexes <- which(control_element)
-      if (all(compare_element[check_indexes])) {
-        print("našla sa zhoda")
-        match_found <- TRUE
-        # Recursive call with compare_element as control_element
-        result_list <- recursive_function(control_coll[-i], compare_element, result_list)
-        return(result_list)
-      }
-    }
-    
-    # If no match found, save the last control_element separately
-    if (!match_found) {
-      result_list<-c(result_list, list(control_element))
-      print("nenašla sa zhoda")
-      print("result list vyzerá takto:")
-      print(result_list)
-      result_list <- recursive_function(control_coll, NULL, result_list)
-      return(result_list)
-    }
-    
-  }
   chains <- recursive_function(control_coll)
+  #print("chains")
+  #print(chains)
   
   
-  controlSet <- logical(length(chains[[1]]))
+  controlSet <- logical(length(chains[[1]][[1]]))
   
   for (setIndex in seq_along(chains)) {
-    set <- chains[[setIndex]]
+    set <- chains[[setIndex]][[length(chains[[setIndex]])]]
     for (i in seq_along(set)) {
       if (set[i]) {
         if (controlSet[i]) {
@@ -201,9 +155,9 @@ DecompositionIntegral$methods(is_choquet = function() {
 DecompositionIntegral$methods(choquet_int = function(f,mi) {
   choquet_coll <- lapply(f, function(x) rev(f >= x))
   choquet_coll<-CollectionIntegral$new(choquet_coll)
-  vysledok<-choquet_coll$compute(f,mi)
-  choquet_coll$show()
-  print(vysledok)
+  result<-choquet_coll$compute(f,mi)
+  result <- list(max_value = result, coll_num = "NA, went through choquet")
+  return(result)
 })
 
 
@@ -214,19 +168,27 @@ CollectionIntegral$methods(compute = function(f, mi) {
     print("len jeden prvok")
     return(result)
   }
+  
   if(.self$chain)
   {
-    result <- .self$chain_int(f,mi)
-    print("je to chain")
+    print("Je to chain")
+    result<-.self$chain_int(f,mi)
     return(result)
   }
-
   if(.self$subpartition)
   {
     result<-.self$subpartition_int(f,mi)
     print("je to subpartition")
     return(result)
   }
+  if(.self$pc)
+  {
+    print("Je to pc")
+    result<-.self$pc_int(f,mi)
+    return(result)
+  }
+
+  
   print("ide cez simplex")
   
   fun <- mi[.self$dec]  #to bude funkcia ktora sa optimalizuje
@@ -244,12 +206,15 @@ CollectionIntegral$methods(compute = function(f, mi) {
 
 CollectionIntegral$methods(chain_int = function(f, mi) {
   num <- length(.self$collection)
-  
   result <- find_min(f, .self$collection[[num]]) * mi[.self$dec[num]]
-  for (i in 1:(num - 1)) {
+  if(.self$single)
+  {#sem to pride len v pripade pc kolekcie
+    return(result)
+  }
+  for (i in 1:(num-1)) {
     result <- result + (find_min(f, .self$collection[[i]]) - find_min(f, .self$collection[[i + 1]])) * mi[.self$dec[i]]
   }
-  
+  print(result)
   return(result)
 })
 
@@ -260,7 +225,34 @@ CollectionIntegral$methods(subpartition_int = function(f, mi) {
   return(result)
 })
 
+CollectionIntegral$methods(pc_int = function(f,mi){
+  chains <- recursive_function(.self$collection)
+  result <- 0
+  print(chains)
+  num<-length(chains)
+  
+  for(chainIndex in 1:num)
+  {
+    print(chains[[chainIndex]])
+    tmp_coll<-CollectionIntegral$new(chains[[chainIndex]])
+    tmp_coll$show()
+    tmp_result<-tmp_coll$chain_int(f,mi)
+    print(tmp_result)
+    result<- result + tmp_result
+  }
+  return(result)
+})
+
+c4<-CollectionIntegral$new(list(c(T,F,T),c(F,T,F),c(T,F,F)))
+c4$compute(f,mu)
+
 DecompositionIntegral$methods(compute=function(f,mi){
+  if(.self$choquet)
+  {
+    result<-.self$choquet_int(f,mi)
+    class(result) <- "custom_result_class"
+    return(result)
+  }
   results <- sapply(.self$collections, function(s) s$compute(f, mi))
   
   maximum <- max(results)
@@ -273,7 +265,61 @@ DecompositionIntegral$methods(compute=function(f,mi){
   
 })
 
-
+recursive_function <- function(control_coll, control_element = NULL, result_list = list(),current_chain = list()) {
+  # zastavovacie kriterium
+  if (length(control_coll) == 0) {
+    #print("už je control_coll prazdne")
+    if (!is.null(control_element)) {
+      result_list<-c(result_list, list(current_chain))
+    }
+    #print(result_list)
+    return(result_list)
+  }
+  #print(control_coll)
+  # prve z control_coll ako control_element
+  if (is.null(control_element)) {
+    #print("beriem control element")
+    control_element <- control_coll[[1]]
+    current_chain<-c(current_chain, list(control_element))
+    #print("pridal sa control element")
+    #print(current_chain)
+    #print(control_element)
+    control_coll <- control_coll[-1]
+    #print("mažem  z control coll, nove je:")
+    #print(control_coll)
+  }
+  
+  # hladanie zhody
+  match_found <- FALSE
+  for (i in seq_along(control_coll)) {
+    #print("vyberám compare element")
+    compare_element <- control_coll[[i]]
+    #print(compare_element)
+    # checknutie či je subset
+    check_indexes <- which(control_element)
+    if (all(compare_element[check_indexes])) {
+      #print("našla sa zhoda")
+      match_found <- TRUE
+      # rekurzia s compare_element ako control_element
+      #print("result list vyzerá takto")
+      #print(result_list)
+      current_chain <- c(current_chain, list(compare_element))
+      result_list <- recursive_function(control_coll[-i], compare_element, result_list,current_chain)
+      
+      return(result_list)
+    }
+  }
+  
+  # ak sa nenašiel chain tak rekurzia 
+  if (!match_found) {
+    result_list<-c(result_list, list(current_chain))
+    #print("nenašla sa zhoda")
+    #print("result list vyzerá takto:")
+    #print(result_list)
+    result_list <- recursive_function(control_coll, NULL, result_list)
+    return(result_list)
+  }
+}
 
 find_min <- function(f, set) {
   num <- length(f)
@@ -293,14 +339,19 @@ logical_to_decimal <- function(logical_vec) {
 }
 
 f<-c(1,2,3)
-mu<-c(1,16,25,81,25,100,196)
+mu<-c(1,16,25,81,100,169,196)
 
 
 
 c1<-CollectionIntegral$new(list(c(T,T,T),c(F,T,T),c(T,F,T),c(F,F,T)))
 c2<-CollectionIntegral$new(list(c(T,F,F),c(T,T,F)))
 c3<-CollectionIntegral$new(list(c(F,F,T)))
+c4<-CollectionIntegral$new(list(c(T,F,F),c(F,T,F),c(F,F,T)))
+c4$compute(f,mu)
+c4$subpartition_int(f,mu)
 
+
+c1
 
 
 ch1<-CollectionIntegral$new(list(c(T,T,T),c(F,T,T),c(F,F,T)))
@@ -310,10 +361,15 @@ ch4<-CollectionIntegral$new(list(c(T,T,T),c(T,F,T),c(T,F,F)))
 ch5<-CollectionIntegral$new(list(c(T,T,T),c(T,T,F),c(F,T,F)))
 ch6<-CollectionIntegral$new(list(c(T,T,T),c(T,T,F),c(T,F,F)))
 choquet<-DecompositionIntegral$new(list(ch1,ch2,ch3,ch4,ch5,ch6))
-choquet
+choquet$compute(f,mu)
+
 
 
 syste<-DecompositionIntegral$new(list(c1,c2,c3))
 syste$compute(f,mu)
 syste
 
+
+
+test<- list(list(c(T,T,F),c(T,F,F)),list(c(F,F,T)))
+test[[2]]
